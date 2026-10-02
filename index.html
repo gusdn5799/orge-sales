@@ -319,6 +319,12 @@ td.pwc{font-family:var(--f-num);text-align:left}
       <li>이 화면에서 "반영된 데이터 다시 불러오기"를 누릅니다.</li>
     </ol>
   </section>
+  <section class="card">
+    <div class="hd"><h2>주간 요약 메일</h2>
+      <span class="fg"><select id="mMode" aria-label="보낼 범위"><option value="last">지난주 (월~일)</option><option value="this">이번 주 (월~데이터 기준일)</option></select><button type="button" class="btn pri" id="mSend">요약 메일 지금 보내기</button></span></div>
+    <div class="meta" id="mMeta"></div>
+    <div class="note" id="mMsg" role="status">매출·수량, 전주 대비, 4주 평균 대비, 상위 거래처 5곳, 상위 품목 5개를 메일로 보냅니다.</div>
+  </section>
   <section class="kpis k4" id="lKpis" aria-label="접속 요약"></section>
   <section class="card">
     <div class="hd"><h2>접속 기록</h2><button type="button" class="btn" id="lReload">새로고침</button></div>
@@ -842,7 +848,7 @@ function logInit(){ if(AUTH.role!=='admin') return; $('vLogBtn').hidden=false; $
   $('lFresh').onclick=()=>location.reload();
   $('aReload').onclick=()=>accLoad(); $('aShow').onchange=()=>accDraw();
   for(const id of ['aPend','aList']) $(id).onclick=accClick;
-  accLoad();
+  accLoad(); mailInit();
   if(AUTH.sheetUrl) $('lSheet').href=AUTH.sheetUrl; else $('lSheet').hidden=true;
   $('lMeta').innerHTML=`<span>데이터 기준일 <b>${dot(MAXD)}</b></span><span>마지막 반영 <b>${esc(D.builtAt||'-')}</b></span><span>집계 행 <b>${num(R.length)}</b></span><span>거래처 <b>${num(D.custs.length)}</b> · 품목 <b>${num(D.items.length)}</b></span>`; }
 async function logRender(){
@@ -877,6 +883,19 @@ async function accClick(e){ const b=e.target.closest('[data-op]'); if(!b||accBus
   if((op==='delete'||op==='reject')&&!b.dataset.armed){ b.dataset.armed='1'; b.textContent=op==='delete'?'정말 삭제':'정말 거절'; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=op==='delete'?'삭제':'거절'; } },4000); return; }
   accBusy=true; b.disabled=true; let res; try{ res=await api({action:'account_set',token:AUTH.token,name:b.dataset.name,op}); }catch(err){ res={ok:false,msg:'접속 서버에 연결하지 못했습니다.'}; }
   accBusy=false; if(res.ok){ ACC=res.rows||[]; accDraw(); } else { b.disabled=false; b.textContent=res.msg||'실패'; } }
+
+// ---------- 주간 요약 메일
+async function mailInit(){
+  let info; try{ info=await api({action:'mail_info',token:AUTH.token}); }catch(e){ info={ok:false}; }
+  $('mMeta').innerHTML=info.ok?`<span>받는 사람 <b>${esc(info.to)}</b></span><span>자동 발송 <b>${info.scheduled===true?'설정됨':info.scheduled===false?'설정 안 됨':'확인 불가'}</b> · 매주 월요일 8시 입력 요청, 10시 요약</span>`:'';
+  const b=$('mSend'); let busy=false;
+  b.onclick=async()=>{ if(busy) return;
+    if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='한 번 더 누르면 발송'; setTimeout(()=>{ if(b.dataset.armed){ delete b.dataset.armed; b.textContent='요약 메일 지금 보내기'; } },4000); return; }
+    delete b.dataset.armed; busy=true; b.disabled=true; b.textContent='보내는 중…'; $('mMsg').textContent='';
+    let res; try{ res=await api({action:'send_report',token:AUTH.token,mode:$('mMode').value}); }catch(e){ res={ok:false,msg:'접속 서버에 연결하지 못했습니다.'}; }
+    busy=false; b.disabled=false; b.textContent='요약 메일 지금 보내기';
+    $('mMsg').textContent=res.ok?res.msg:(res.msg||'보내지 못했습니다.'); $('mMsg').style.color=res.ok?'var(--good)':'var(--bad)'; };
+}
 
 init(); dInit(); logInit(); setView(location.hash==='#detail'?'detail':'dash');
 }
