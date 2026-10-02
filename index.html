@@ -186,6 +186,9 @@ td.pwc{font-family:var(--f-num);text-align:left}
   <div class="fg"><span class="t">비교</span>
     <span class="seg" role="group" aria-label="비교 기준"><button type="button" data-cmp="yoy">전년 동기</button><button type="button" data-cmp="prev">직전 기간</button></span>
   </div>
+  <div class="fg"><span class="t">보기</span>
+    <span class="seg" role="group" aria-label="금액 또는 수량"><button type="button" data-m="v">금액</button><button type="button" data-m="q">수량</button></span>
+  </div>
   <div class="fg"><span class="t">채널</span><label class="tog"><input type="checkbox" id="fChAll">전체</label><span id="fCh" class="fg"></span></div>
   <div class="fg"><span class="t">카테고리</span><label class="tog"><input type="checkbox" id="fCatAll">전체</label><span id="fCat" class="fg"></span></div>
   <div class="fg"><label class="t" for="fCust">거래처</label><span class="cb"><input type="text" id="fCust" role="combobox" autocomplete="off" spellcheck="false" placeholder="거래처 검색 또는 선택" aria-expanded="false" aria-autocomplete="list" aria-controls="fCustList"><button type="button" class="cbx" tabindex="-1" aria-label="거래처 목록 열기">▾</button><ul id="fCustList" role="listbox" hidden></ul></span></div>
@@ -205,7 +208,7 @@ td.pwc{font-family:var(--f-num);text-align:left}
     <div class="ch" id="chTrend"></div>
   </div>
   <div class="card">
-    <div class="hd"><h2>카테고리 매출 구성비</h2></div>
+    <div class="hd"><h2 id="mixTitle">카테고리 매출 구성비</h2></div>
     <div class="note" id="mixNote"></div>
     <div class="legend" id="lgMix"></div>
     <div class="ch" id="chMix"></div>
@@ -214,12 +217,12 @@ td.pwc{font-family:var(--f-num);text-align:left}
 
 <section class="row3">
   <div class="card">
-    <div class="hd"><h2>채널별 매출</h2></div>
+    <div class="hd"><h2 id="chTitle">채널별 매출</h2></div>
     <div class="note">선택 기간 기준. 오른쪽은 비중과 비교 기간 대비 증감률.</div>
     <div class="ch" id="chCh"></div>
   </div>
   <div class="card">
-    <div class="hd"><h2>카테고리별 매출</h2></div>
+    <div class="hd"><h2 id="catTitle">카테고리별 매출</h2></div>
     <div class="note">선택 기간 기준.</div>
     <div class="ch" id="chCat"></div>
   </div>
@@ -233,12 +236,12 @@ td.pwc{font-family:var(--f-num);text-align:left}
 <section class="row tables">
   <div class="card">
     <div class="hd"><h2>거래처 랭킹</h2><span class="seg" role="group" aria-label="정렬"><button type="button" data-cs="amt" aria-pressed="true">매출순</button><button type="button" data-cs="drop">감소폭순</button></span></div>
-    <div class="note">단위 백만원 · 추이선은 최근 12개월</div>
+    <div class="note" id="custNote">단위 백만원 · 추이선은 최근 12개월</div>
     <div class="tbl"><table id="tCust"></table></div>
   </div>
   <div class="card">
     <div class="hd"><h2>품목 랭킹</h2></div>
-    <div class="note">단위 백만원</div>
+    <div class="note" id="itemNote">단위 백만원</div>
     <div class="tbl"><table id="tItem"></table></div>
   </div>
 </section>
@@ -357,7 +360,7 @@ function bLabel(b,g){ if(g==='D')return sdot(b.s0); if(g==='W')return sdot(b.s0)
 function buckets(a,b,g){ const out=[]; let last=null; for(let d=a;d<=b;d++){const id=bId(d,g); if(!last||last.id!==id){last={id,s:d,e:d,s0:g==='W'?id*7+2:d};out.push(last);} else last.e=d;} return out; }
 const GN={D:'일별',W:'주별',M:'월별',Q:'분기별',Y:'연도별'};
 
-const DEF=()=>({from:idx(maxY,0,1),to:MAXD,g:'M',cmp:'yoy',mode:'period',ch:new Set(D.chs.map((_,i)=>i)),cat:new Set(PROD),cust:-1,ship:false,cs:'amt',al:'churn'});
+const DEF=()=>({from:idx(maxY,0,1),to:MAXD,g:'M',cmp:'yoy',mode:'period',ch:new Set(D.chs.map((_,i)=>i)),cat:new Set(PROD),cust:-1,ship:false,cs:'amt',al:'churn',m:'v'});
 const st=DEF();
 
 
@@ -401,6 +404,9 @@ function pill(p){ if(!HAS) return '<span class="pill nt">–</span>'; if(p==null
   const c=Math.abs(p)<0.5?'nt':(p>0?'up':'dn'); return `<span class="pill ${c}">${p>999?'+999%↑':(p>0?'+':'')+p.toFixed(1)+'%'}</span>`;}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const cmpName=()=>st.cmp==='yoy'?'전년 동기':'직전 기간';
+// dashboard metric: 금액(v) or 수량(q)
+const QM=()=>st.m==='q', LB=()=>QM()?'수량':'매출';
+const fvP=v=>QM()?[num(v),'개']:money(v), fv=v=>fvP(v).join(''), ft=v=>QM()?num(v):mil(v);
 
 function cmpRange(){ if(st.cmp==='yoy') return [shiftYear(st.from),shiftYear(st.to)]; const n=st.to-st.from+1; return [st.from-n,st.from-1]; }
 
@@ -412,25 +418,25 @@ function build(){
     cust:{},pcust:{},item:{},pitem:{},ch:Array(D.chs.length).fill(0),pch:Array(D.chs.length).fill(0),cat:Array(NC).fill(0),pcat:Array(NC).fill(0),
     ov:{},mix:{},custM:{},first:{},last:{},r90:{},p365:{},mem:{},pmem:{}};
   const useGrp=!(st.cust>=0&&st.cust<NCU);
-  const g=st.g, to=st.to;
+  const g=st.g, to=st.to, qm=QM();
   for(const r of R){
-    const d=r[0],cr=r[1],ii=r[2],q=r[3],v=r[4], c=D.itemCat[ii];
+    const d=r[0],cr=r[1],ii=r[2],q=r[3],v=r[4], c=D.itemCat[ii], x=qm?q:v;
     const gi=D.custGrp[cr], ci=(useGrp&&gi>=0)?NCU+gi:cr;
     if(c===SHIP){ if(!st.ship) continue; } else if(!st.cat.has(c)) continue;
     const chn=D.custCh[cr]; if(!st.ch.has(chn)) continue;
     if(st.cust>=0&&ci!==st.cust) continue;
     const y=YY[d], m=MM[d];
-    (A.ov[y]||(A.ov[y]=Array(12).fill(0)))[m]+=v;
-    if(c!==SHIP) (A.mix[y]||(A.mix[y]=Array(NC).fill(0)))[c]+=v;
-    (A.custM[ci]||(A.custM[ci]=new Float64Array(NMON)))[(y-2022)*12+m]+=v;
+    (A.ov[y]||(A.ov[y]=Array(12).fill(0)))[m]+=x;
+    if(c!==SHIP) (A.mix[y]||(A.mix[y]=Array(NC).fill(0)))[c]+=x;
+    (A.custM[ci]||(A.custM[ci]=new Float64Array(NMON)))[(y-2022)*12+m]+=x;
     if(v>0){ if(A.first[ci]==null||d<A.first[ci])A.first[ci]=d; if(d<=to&&(A.last[ci]==null||d>A.last[ci]))A.last[ci]=d; }
     if(d<=to){ if(d>to-90) A.r90[ci]=(A.r90[ci]||0)+v; else if(d>to-455) A.p365[ci]=(A.p365[ci]||0)+v; }
-    if(d>=st.from&&d<=to){ A.cur+=v; A.S[bm.get(bId(d,g))]+=v; A.ch[chn]+=v; A.cat[c]+=v; A.cust[ci]=(A.cust[ci]||0)+v;
+    if(d>=st.from&&d<=to){ A.cur+=x; A.S[bm.get(bId(d,g))]+=x; A.ch[chn]+=x; A.cat[c]+=x; A.cust[ci]=(A.cust[ci]||0)+x;
       const it=A.item[ii]||(A.item[ii]=[0,0]); it[0]+=v; it[1]+=q;
-      if(c===EGG){A.qEgg+=q;A.egg+=v;} else if(c!==SHIP)A.qEtc+=q; if(D.custCp[cr])A.coup+=v; if(ci!==cr)A.mem[cr]=(A.mem[cr]||0)+v; }
-    if(hasCmp&&d>=pf&&d<=pt){ A.prev+=v; A.PS[pbm.get(bId(d,g))]+=v; A.pch[chn]+=v; A.pcat[c]+=v; A.pcust[ci]=(A.pcust[ci]||0)+v;
+      if(c===EGG){A.qEgg+=q;A.egg+=x;} else if(c!==SHIP)A.qEtc+=q; if(D.custCp[cr])A.coup+=x; if(ci!==cr)A.mem[cr]=(A.mem[cr]||0)+x; }
+    if(hasCmp&&d>=pf&&d<=pt){ A.prev+=x; A.PS[pbm.get(bId(d,g))]+=x; A.pch[chn]+=x; A.pcat[c]+=x; A.pcust[ci]=(A.pcust[ci]||0)+x;
       const it=A.pitem[ii]||(A.pitem[ii]=[0,0]); it[0]+=v; it[1]+=q;
-      if(c===EGG){A.pqEgg+=q;A.pegg+=v;} else if(c!==SHIP)A.pqEtc+=q; if(D.custCp[cr])A.pcoup+=v; if(ci!==cr)A.pmem[cr]=(A.pmem[cr]||0)+v; }
+      if(c===EGG){A.pqEgg+=q;A.pegg+=x;} else if(c!==SHIP)A.pqEtc+=q; if(D.custCp[cr])A.pcoup+=x; if(ci!==cr)A.pmem[cr]=(A.pmem[cr]||0)+x; }
   }
   return A;
 }
@@ -444,15 +450,15 @@ function kpis(A){
   const es=A.cur>0?A.egg/A.cur*100:0, pes=A.prev>0?A.pegg/A.prev*100:0;
   const shCls=sh>=50?'dn':sh>=40?'wn':'up';
   const dpp=(a,b)=>`${a-b>=0?'+':''}${(a-b).toFixed(1)}%p`;
-  const V=v=>{const [a,u]=money(v);return `${a}<small>${u}</small>`;};
+  const V=v=>{const [a,u]=fvP(v);return `${a}<small>${u}</small>`;}, qm=QM();
   const K=[
-    ['순매출',V(A.cur),`${pill(pct(A.cur,A.prev))}<span>${cn} ${mstr(A.prev)}</span>`],
-    ['일평균 매출',V(A.cur/n),`${pill(pct(A.cur/n,A.prev/pn))}<span>${n}일 기준</span>`],
-    ['월평균 매출',V(A.cur/mo),`${pill(pct(A.cur/mo,A.prev/pmo))}<span>${n<28?`${n}일 실적을 월로 환산`:`${mo.toFixed(1)}개월 기준`}</span>`],
-    ['분기평균 매출',V(A.cur/qt),`${pill(pct(A.cur/qt,A.prev/pqt))}<span>${n<85?`${n}일 실적을 분기로 환산`:`${qt.toFixed(1)}분기 기준`}</span>`],
+    [qm?'판매수량':'순매출',V(A.cur),`${pill(pct(A.cur,A.prev))}<span>${cn} ${fv(A.prev)}</span>`],
+    [`일평균 ${LB()}`,V(A.cur/n),`${pill(pct(A.cur/n,A.prev/pn))}<span>${n}일 기준</span>`],
+    [`월평균 ${LB()}`,V(A.cur/mo),`${pill(pct(A.cur/mo,A.prev/pmo))}<span>${n<28?`${n}일 실적을 월로 환산`:`${mo.toFixed(1)}개월 기준`}</span>`],
+    [`분기평균 ${LB()}`,V(A.cur/qt),`${pill(pct(A.cur/qt,A.prev/pqt))}<span>${n<85?`${n}일 실적을 분기로 환산`:`${qt.toFixed(1)}분기 기준`}</span>`],
     ['판매수량 · 계란',`${num(A.qEgg)}<small>팩</small>`,`${pill(pct(A.qEgg,A.pqEgg))}<span>${cn} ${num(A.pqEgg)}</span><span style="flex-basis:100%;color:var(--muted)">계란 외 ${num(A.qEtc)}개 ${pill(pct(A.qEtc,A.pqEtc))}</span>`],
-    ['계란 매출 비중',`${es.toFixed(1)}<small>%</small>`,`<span class="pill nt">${dpp(es,pes)}</span><span>${cn} ${pes.toFixed(1)}%</span>`],
-    ['쿠팡 의존도',`${sh.toFixed(1)}<small>%</small>`,`<span class="pill ${shCls}">${sh>=50?'위험':sh>=40?'주의':'양호'}</span><span>${cn} 대비 ${dpp(sh,psh)}</span>`],
+    [`계란 ${LB()} 비중`,`${es.toFixed(1)}<small>%</small>`,`<span class="pill nt">${dpp(es,pes)}</span><span>${cn} ${pes.toFixed(1)}%</span>`],
+    [qm?'쿠팡 의존도 (수량)':'쿠팡 의존도',`${sh.toFixed(1)}<small>%</small>`,`<span class="pill ${shCls}">${sh>=50?'위험':sh>=40?'주의':'양호'}</span><span>${cn} 대비 ${dpp(sh,psh)}</span>`],
     ['활성 거래처',`${act}<small>곳</small>`,`${pill(pct(act,pact))}<span>${cn} ${pact}곳</span>`],
   ];
   if(!A.hasCmp){ const nc='<span>비교 기간 데이터 없음</span>'; K[0][2]=nc; K[1][2]=`<span>${n}일 기준</span>`; K[2][2]=`<span>${mo.toFixed(1)}개월 기준</span>`; K[3][2]=`<span>${qt.toFixed(1)}분기 기준</span>`; K[4][2]=`<span>계란 외 ${num(A.qEtc)}개</span>`; K[5][2]=nc; K[6][2]=`<span class="pill ${shCls}">${sh>=50?'위험':sh>=40?'주의':'양호'}</span>`; K[7][2]=nc; }
@@ -467,21 +473,21 @@ function tipper(box){ let t=box.querySelector('.tip'); if(!t){t=document.createE
 function niceMax(v){ if(v<=0) return 1; const p=Math.pow(10,Math.floor(Math.log10(v))); for(const s of [1,1.2,1.5,2,2.5,3,4,5,6,8,10]) if(s*p>=v) return s*p; return 10*p; }
 const axisFmt=(v,mx)=>mx>=1e8?(v/1e8).toFixed(mx>=4e8?1:2)+'억':Math.round(v/1e4).toLocaleString('ko-KR')+'만';
 function frame(W,H,L,Rr,T,B,mx){ const ih=H-T-B, y=v=>T+ih*(1-v/mx); let s='';
-  for(let k=0;k<=4;k++){ const v=mx*k/4; s+=`<line x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${axisFmt(v,mx)}</text>`; }
+  for(let k=0;k<=4;k++){ const v=mx*k/4; s+=`<line x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${QM()?num(v):axisFmt(v,mx)}</text>`; }
   return {s,y,ih}; }
 
 // ---------- period trend
 function trendPeriod(A){
   const box=$('chTrend'), n=A.B.length, cn=cmpName();
-  $('trendTitle').textContent=`${GN[st.g]} 매출 추이`;
+  $('trendTitle').textContent=`${GN[st.g]} ${LB()} 추이`;
   const lb=A.B[n-1], partial=st.g!=='D'&&bId(lb.e+1,st.g)===lb.id;
-  $('trendNote').textContent=`${dot(st.from)} ~ ${dot(st.to)} · ${n}개 구간`+(partial?` · 마지막 구간은 ${sdot(lb.e).slice(3)}까지만 집계`:'');
+  $('trendNote').textContent=`${dot(st.from)} ~ ${dot(st.to)} · ${n}개 구간`+(partial?` · 마지막 구간은 ${sdot(lb.e).slice(3)}까지만 집계`:'')+(QM()?' · 수량은 규격이 다른 품목을 그대로 더한 값':'');
   const c1=css('--s1'), c0=css('--y-mid');
   $('lgTrend').innerHTML=`<span><i style="background:${c1}"></i>선택 기간</span>`+(A.hasCmp?`<span><i style="background:${c0}"></i>${cn}</span>`:'');
   const W=760,H=300,L=52,Rr=16,T=12,B=26, iw=W-L-Rr;
   const mx=niceMax(Math.max(1,...A.S,...(A.hasCmp?A.PS:[0])));
   const F=frame(W,H,L,Rr,T,B,mx), y=F.y, x=i=>n>1?L+iw*i/(n-1):L+iw/2;
-  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${GN[st.g]} 매출 추이">`+F.s;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${GN[st.g]} ${LB()} 추이">`+F.s;
   const step=Math.max(1,Math.ceil(n/8));
   for(let i=0;i<n;i+=step) s+=`<text x="${x(i)}" y="${H-8}" text-anchor="${n>1&&i===0?'start':n>1&&i===n-1?'end':'middle'}">${bLabel(A.B[i],st.g)}</text>`;
   const path=(arr,m)=>Array.from({length:m},(_,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(Math.max(0,arr[i])).toFixed(1)}`).join('');
@@ -494,8 +500,8 @@ function trendPeriod(A){
   const rng=b=>b.s===b.e?dot(b.s):`${dot(b.s)} ~ ${dot(b.e)}`;
   hit.addEventListener('pointermove',e=>{ const rc=sv.getBoundingClientRect(); const px=(e.clientX-rc.left)*W/rc.width;
     const i=n>1?Math.max(0,Math.min(n-1,Math.round((px-L)/iw*(n-1)))):0; xh.setAttribute('x1',x(i)); xh.setAttribute('x2',x(i)); xh.setAttribute('visibility','visible');
-    let h=`<b>${rng(A.B[i])}</b><div class="r"><span><i style="background:${c1}"></i>매출</span><span>${mstr(A.S[i])}</span></div>`;
-    if(A.hasCmp&&i<pm) h+=`<div class="r"><span><i style="background:${c0}"></i>${cn}</span><span>${mstr(A.PS[i])} ${pill(pct(A.S[i],A.PS[i]))}</span></div><div style="color:var(--muted)">${rng(A.PB[i])}</div>`;
+    let h=`<b>${rng(A.B[i])}</b><div class="r"><span><i style="background:${c1}"></i>${LB()}</span><span>${fv(A.S[i])}</span></div>`;
+    if(A.hasCmp&&i<pm) h+=`<div class="r"><span><i style="background:${c0}"></i>${cn}</span><span>${fv(A.PS[i])} ${pill(pct(A.S[i],A.PS[i]))}</span></div><div style="color:var(--muted)">${rng(A.PB[i])}</div>`;
     const bx=box.getBoundingClientRect(); tp.show(h,e.clientX-bx.left,e.clientY-bx.top); });
   hit.addEventListener('pointerleave',()=>{tp.hide();xh.setAttribute('visibility','hidden');});
 }
@@ -503,7 +509,7 @@ function trendPeriod(A){
 // ---------- year overlay
 function trendOverlay(A){
   const box=$('chTrend'); const years=[]; for(let y=2022;y<=maxY;y++) years.push(y);
-  $('trendTitle').textContent='월별 매출 · 연도 겹쳐보기';
+  $('trendTitle').textContent=`월별 ${LB()} · 연도 겹쳐보기`;
   $('trendNote').textContent='기간 선택과 무관하게 전 기간을 보여줍니다. 채널·카테고리·거래처 필터는 적용됩니다.';
   const col=yr=>{const k=maxY-yr; return k===0?css('--s1'):k===1?css('--s2'):k===2?css('--y-mid'):css('--y-old');};
   const cnt=yr=>yr===maxY?lastFullMon:12;
@@ -522,7 +528,7 @@ function trendOverlay(A){
   hit.addEventListener('pointermove',e=>{ const rc=sv.getBoundingClientRect(); const px=(e.clientX-rc.left)*W/rc.width;
     const i=Math.max(0,Math.min(11,Math.round((px-L)/iw*11))); xh.setAttribute('x1',x(i)); xh.setAttribute('x2',x(i)); xh.setAttribute('visibility','visible');
     let h=`<b>${i+1}월</b>`; years.slice().reverse().forEach(yr=>{ const a=A.ov[yr]; if(!a||i>=cnt(yr)) return; const pv=A.ov[yr-1]?A.ov[yr-1][i]:null;
-      h+=`<div class="r"><span><i style="background:${col(yr)}"></i>${yr}</span><span>${mstr(a[i])} ${pv?pill(pct(a[i],pv)):''}</span></div>`; });
+      h+=`<div class="r"><span><i style="background:${col(yr)}"></i>${yr}</span><span>${fv(a[i])} ${pv?pill(pct(a[i],pv)):''}</span></div>`; });
     const bx=box.getBoundingClientRect(); tp.show(h,e.clientX-bx.left,e.clientY-bx.top); });
   hit.addEventListener('pointerleave',()=>{tp.hide();xh.setAttribute('visibility','hidden');});
 }
@@ -530,7 +536,8 @@ function trendOverlay(A){
 // ---------- category mix by year
 function mix(A){
   const box=$('chMix'); const years=[]; for(let y=2022;y<=maxY;y++) years.push(y);
-  $('mixNote').textContent=`연도별 상품 매출 구성(택배비 제외). ${maxY}년은 ${sdot(MAXD).slice(3)}까지.`;
+  $('mixTitle').textContent=`카테고리 ${LB()} 구성비`; $('chTitle').textContent=`채널별 ${LB()}`; $('catTitle').textContent=`카테고리별 ${LB()}`;
+  $('mixNote').textContent=`연도별 상품 ${LB()} 구성(택배비 제외). ${maxY}년은 ${sdot(MAXD).slice(3)}까지.`;
   const W=420,H=300,L=40,T=10,B=26,Rr=8, iw=W-L-Rr, ih=H-T-B, bw=iw/years.length*0.62;
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="연도별 카테고리 구성비">`;
   for(let k=0;k<=4;k++){ const yy=T+ih*(1-k/4); s+=`<line x1="${L}" x2="${W-Rr}" y1="${yy}" y2="${yy}" stroke="var(--grid)"/><text x="${L-6}" y="${yy+4}" text-anchor="end">${k*25}%</text>`; }
@@ -544,7 +551,7 @@ function mix(A){
   $('lgMix').innerHTML=PROD.map(c=>`<span><i style="background:${catCol(c)}"></i>${esc(D.cats[c])}</span>`).join('');
   const tp=tipper(box);
   box.querySelectorAll('rect[data-k]').forEach(el=>{ el.addEventListener('pointermove',e=>{ const g=segs[+el.dataset.k]; const bx=box.getBoundingClientRect();
-      tp.show(`<b>${g.yr} · ${esc(D.cats[g.c])}</b><div class="r"><span>매출</span><span>${mstr(g.v)}</span></div><div class="r"><span>비중</span><span>${(g.v/g.tot*100).toFixed(1)}%</span></div>`,e.clientX-bx.left,e.clientY-bx.top); });
+      tp.show(`<b>${g.yr} · ${esc(D.cats[g.c])}</b><div class="r"><span>${LB()}</span><span>${fv(g.v)}</span></div><div class="r"><span>비중</span><span>${(g.v/g.tot*100).toFixed(1)}%</span></div>`,e.clientX-bx.left,e.clientY-bx.top); });
     el.addEventListener('pointerleave',()=>tp.hide()); });
 }
 
@@ -552,7 +559,7 @@ function mix(A){
 function hbars(boxId,labels,cur,prev,idxs,colorFn){
   const box=$(boxId); const tot=idxs.reduce((p,i)=>p+Math.max(0,cur[i]),0);
   const rows=idxs.filter(i=>cur[i]!==0||prev[i]!==0).sort((a,b)=>cur[b]-cur[a]);
-  if(!rows.length){ box.innerHTML='<div class="empty">선택한 조건에 해당하는 매출이 없습니다.</div>'; return; }
+  if(!rows.length){ box.innerHTML='<div class="empty">선택한 조건에 해당하는 판매가 없습니다.</div>'; return; }
   const W=Math.max(300,box.clientWidth||560),rh=34,L=96,Rr=118,H=rows.length*rh+6, iw=W-L-Rr-66, mx=Math.max(...rows.map(i=>Math.max(cur[i],prev[i])),1);
   let s=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">`;
   rows.forEach((i,k)=>{ const y0=k*rh+4, w=Math.max(0,iw*cur[i]/mx), pw=Math.max(0,iw*prev[i]/mx), p=pct(cur[i],prev[i]);
@@ -560,9 +567,9 @@ function hbars(boxId,labels,cur,prev,idxs,colorFn){
     s+=`<rect x="${L}" y="${y0+5}" width="${w}" height="16" rx="3" fill="${colorFn(i)}"/>`;
     if(HAS) s+=`<line x1="${L+pw}" x2="${L+pw}" y1="${y0+1}" y2="${y0+25}" stroke="var(--fg)" stroke-width="1.5"/>`;
     const pc=!HAS?'':p==null?'신규':p>999?'+999%↑':`${p>0?'+':''}${p.toFixed(1)}%`, col=p==null?'var(--fg2)':p>=0?'var(--good)':'var(--bad)';
-    s+=`<text x="${L+Math.max(w,pw)+8}" y="${y0+17}" style="fill:var(--fg);font-size:12px;font-weight:600">${mstr(cur[i])}</text>`;
+    s+=`<text x="${L+Math.max(w,pw)+8}" y="${y0+17}" style="fill:var(--fg);font-size:12px;font-weight:600">${fv(cur[i])}</text>`;
     s+=`<text x="${W-2}" y="${y0+17}" text-anchor="end" style="font-size:12px"><tspan style="fill:var(--muted)">${tot?(cur[i]/tot*100).toFixed(1):0}%${HAS?' · ':''}</tspan><tspan style="fill:${col};font-weight:600">${pc}</tspan></text>`; });
-  s+=`</svg><div class="legend" style="margin-top:4px"><span><i style="background:var(--fg);width:2px;height:12px"></i>세로선 = ${cmpName()} 매출</span></div>`;
+  s+=`</svg><div class="legend" style="margin-top:4px"><span><i style="background:var(--fg);width:2px;height:12px"></i>세로선 = ${cmpName()} ${LB()}</span></div>`;
   box.innerHTML=s;
 }
 
@@ -576,23 +583,24 @@ function tables(A){
   let cs=[...new Set([...Object.keys(A.cust),...Object.keys(A.pcust)].map(Number))].filter(c=>(A.cust[c]||0)!==0||(A.pcust[c]||0)!==0);
   if(st.cs==='amt') cs.sort((a,b)=>(A.cust[b]||0)-(A.cust[a]||0)); else cs.sort((a,b)=>((A.cust[a]||0)-(A.pcust[a]||0))-((A.cust[b]||0)-(A.pcust[b]||0)));
   cs=cs.slice(0,50);
-  $('tCust').innerHTML=`<thead><tr><th class="rk">#</th><th class="t">거래처</th><th>매출</th><th>비중</th><th>${cn}비</th><th>12개월</th></tr></thead><tbody>`+
-    (cs.length?cs.map((c,k)=>{ const v=A.cust[c]||0, p=A.pcust[c]||0; let h=`<tr><td class="rk">${k+1}</td><td class="t">${esc(entName(c))}<span>${esc(D.chs[entCh(c)])}${c>=NCU?` · ${GM[c-NCU].length}개사 합산`:''}</span></td><td>${mil(v)}</td><td>${(v/tot*100).toFixed(1)}%</td><td>${p>0?pill(pct(v,p)):(v?pill(null):'')}</td><td>${A.custM[c]?spark(A.custM[c],endM):''}</td></tr>`;
+  $('tCust').innerHTML=`<thead><tr><th class="rk">#</th><th class="t">거래처</th><th>${LB()}</th><th>비중</th><th>${cn}비</th><th>12개월</th></tr></thead><tbody>`+
+    (cs.length?cs.map((c,k)=>{ const v=A.cust[c]||0, p=A.pcust[c]||0; let h=`<tr><td class="rk">${k+1}</td><td class="t">${esc(entName(c))}<span>${esc(D.chs[entCh(c)])}${c>=NCU?` · ${GM[c-NCU].length}개사 합산`:''}</span></td><td>${ft(v)}</td><td>${(v/tot*100).toFixed(1)}%</td><td>${p>0?pill(pct(v,p)):(v?pill(null):'')}</td><td>${A.custM[c]?spark(A.custM[c],endM):''}</td></tr>`;
       if(c>=NCU) GM[c-NCU].forEach(m=>{ const mv=A.mem[m]||0, mp=A.pmem[m]||0; if(!mv&&!mp) return;
-        h+=`<tr class="sub"><td></td><td class="t">└ ${esc(D.custs[m])}</td><td>${mil(mv)}</td><td>${(mv/tot*100).toFixed(1)}%</td><td>${mp>0?pill(pct(mv,mp)):(mv?pill(null):'')}</td><td></td></tr>`; });
+        h+=`<tr class="sub"><td></td><td class="t">└ ${esc(D.custs[m])}</td><td>${ft(mv)}</td><td>${(mv/tot*100).toFixed(1)}%</td><td>${mp>0?pill(pct(mv,mp)):(mv?pill(null):'')}</td><td></td></tr>`; });
       return h;}).join(''):'<tr><td colspan="6" class="empty">데이터 없음</td></tr>')+'</tbody>';
-  const it=Object.keys(A.item).map(Number).sort((a,b)=>A.item[b][0]-A.item[a][0]).slice(0,50);
+  const mi=QM()?1:0, it=Object.keys(A.item).map(Number).sort((a,b)=>A.item[b][mi]-A.item[a][mi]).slice(0,50);
+  $('custNote').textContent=`단위 ${QM()?'개':'백만원'} · 추이선은 최근 12개월`; $('itemNote').textContent=`매출 단위 백만원 · ${cn}비는 ${LB()} 기준`;
   $('tItem').innerHTML=`<thead><tr><th class="rk">#</th><th class="t">품목</th><th>매출</th><th>${cn}비</th><th>수량</th></tr></thead><tbody>`+
     (it.length?it.map((i,k)=>{ const [v,q]=A.item[i], pv=A.pitem[i];
-      return `<tr><td class="rk">${k+1}</td><td class="t">${esc(D.items[i])}<span>${esc(D.cats[D.itemCat[i]])}</span></td><td>${mil(v)}</td><td>${pv&&pv[0]>0?pill(pct(v,pv[0])):pill(null)}</td><td>${num(q)}</td></tr>`;}).join(''):'<tr><td colspan="5" class="empty">데이터 없음</td></tr>')+'</tbody>';
+      return `<tr><td class="rk">${k+1}</td><td class="t">${esc(D.items[i])}<span>${esc(D.cats[D.itemCat[i]])}</span></td><td>${mil(v)}</td><td>${pv&&pv[mi]>0?pill(pct(mi?q:v,pv[mi])):pill(null)}</td><td>${num(q)}</td></tr>`;}).join(''):'<tr><td colspan="5" class="empty">데이터 없음</td></tr>')+'</tbody>';
   if(st.al==='churn'){
     $('alNote').textContent=`${dot(st.to)} 기준 최근 90일 매출 0, 그 이전 1년 매출 100만원 이상 · 단위 백만원`;
     const out=[]; for(const c in A.p365){ if((A.r90[c]||0)<=0&&A.p365[c]>=1e6) out.push([+c,A.p365[c],A.last[c]]); } out.sort((a,b)=>b[1]-a[1]);
     $('tAct').innerHTML=`<thead><tr><th class="t">거래처</th><th>이전 1년</th><th>마지막 매출일</th></tr></thead><tbody>`+(out.length?out.map(([c,p,l])=>`<tr><td class="t">${esc(entName(c))}<span>${esc(D.chs[entCh(c)])}</span></td><td>${mil(p)}</td><td>${l!=null?sdot(l):'-'}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">해당 거래처가 없습니다.</td></tr>')+'</tbody>';
   } else {
-    $('alNote').textContent='선택 기간 안에 첫 매출이 발생한 거래처 · 단위 백만원';
+    $('alNote').textContent=`선택 기간 안에 첫 매출이 발생한 거래처 · 단위 ${QM()?'개':'백만원'}`;
     const out=Object.keys(A.first).map(Number).filter(c=>A.first[c]>=st.from&&A.first[c]<=st.to).sort((a,b)=>(A.cust[b]||0)-(A.cust[a]||0));
-    $('tAct').innerHTML=`<thead><tr><th class="t">거래처</th><th>기간 매출</th><th>첫 매출일</th><th>최근 매출일</th></tr></thead><tbody>`+(out.length?out.map(c=>`<tr><td class="t">${esc(entName(c))}<span>${esc(D.chs[entCh(c)])}</span></td><td>${mil(A.cust[c]||0)}</td><td>${sdot(A.first[c])}</td><td>${A.last[c]!=null?sdot(A.last[c]):'-'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">해당 거래처가 없습니다.</td></tr>')+'</tbody>';
+    $('tAct').innerHTML=`<thead><tr><th class="t">거래처</th><th>기간 ${LB()}</th><th>첫 매출일</th><th>최근 매출일</th></tr></thead><tbody>`+(out.length?out.map(c=>`<tr><td class="t">${esc(entName(c))}<span>${esc(D.chs[entCh(c)])}</span></td><td>${ft(A.cust[c]||0)}</td><td>${sdot(A.first[c])}</td><td>${A.last[c]!=null?sdot(A.last[c]):'-'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">해당 거래처가 없습니다.</td></tr>')+'</tbody>';
   }
 }
 
@@ -606,7 +614,7 @@ function render(){
 // ---------- controls
 function sync(){ $('fFrom').value=iso(st.from); $('fTo').value=iso(st.to);
   const press=(sel,key,val)=>document.querySelectorAll(sel).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===val)));
-  press('[data-g]','g',st.g); press('[data-cmp]','cmp',st.cmp); press('[data-mode]','mode',st.mode); press('[data-cs]','cs',st.cs); press('[data-al]','al',st.al);
+  press('[data-g]','g',st.g); press('[data-cmp]','cmp',st.cmp); press('[data-m]','m',st.m); press('[data-mode]','mode',st.mode); press('[data-cs]','cs',st.cs); press('[data-al]','al',st.al);
   document.querySelectorAll('[data-ch]').forEach(b=>b.setAttribute('aria-pressed',String(st.ch.has(+b.dataset.ch))));
   document.querySelectorAll('[data-cat]').forEach(b=>b.setAttribute('aria-pressed',String(st.cat.has(+b.dataset.cat))));
   cbF.set(st.cust); $('fShip').checked=st.ship;
@@ -634,7 +642,7 @@ function init(){
     else if(q==='ly'){st.from=idx(maxY-1,0,1);st.to=idx(maxY-1,11,31);st.g='M';} else {st.from=0;st.g='Q';}
     go(); });
   const seg=(sel,key,after)=>document.querySelectorAll(sel).forEach(b=>b.onclick=()=>{ st[key]=b.dataset[key]; if(after) after(); go(); });
-  seg('[data-g]','g',()=>{st.mode='period';}); seg('[data-cmp]','cmp'); seg('[data-mode]','mode'); seg('[data-cs]','cs'); seg('[data-al]','al');
+  seg('[data-g]','g',()=>{st.mode='period';}); seg('[data-cmp]','cmp'); seg('[data-m]','m'); seg('[data-mode]','mode'); seg('[data-cs]','cs'); seg('[data-al]','al');
   const rr=()=>{ if(view==='detail') dRender(); else if(view==='dash') render(); };
   let rt; addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(rr,150);});
   if(window.matchMedia){ const mq=matchMedia('(prefers-color-scheme: dark)'); if(mq.addEventListener) mq.addEventListener('change',rr); }
