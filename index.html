@@ -635,7 +635,7 @@ function sync(){ $('fFrom').value=iso(st.from); $('fTo').value=iso(st.to);
 function toggle(set,v){ set.has(v)?set.delete(v):set.add(v); }
 function go(){ sync(); render(); }
 function init(){
-  $('srcLbl').textContent=`공급가액(부가세 제외) 기준 · 2022.01.01 ~ ${dot(MAXD)} · ERP 판매현황(일별)`+(D.builtAt?` · 반영 ${D.builtAt}`:'');
+  $('srcLbl').textContent=`공급가액(부가세 제외) 기준 · 2022.01.01 ~ ${dot(MAXD)} · ERP 판매현황(일별)`+(D.builtAt?` · 반영 ${D.builtAt}`:'')+' · 개발자 : 정현우';
   for(const id of ['fFrom','fTo']){ $(id).min='2022-01-01'; $(id).max=iso(MAXD); }
   $('fCh').innerHTML=D.chs.map((c,i)=>`<button type="button" class="chip" data-ch="${i}">${esc(c)}</button>`).join('');
   $('fCat').innerHTML=PROD.map(c=>`<button type="button" class="chip" data-cat="${c}">${esc(D.cats[c])}</button>`).join('');
