@@ -141,17 +141,29 @@ html{color-scheme:light} body{margin:0} img{max-width:100%}
 .meta b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
 .steps{margin:0;padding-left:18px;font-size:12.5px;color:var(--fg2);line-height:1.7}
 .gate a{color:var(--accent)}
+.gate .okmsg{color:var(--good);font-size:13px}
+.gate .alt{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:7px;padding:9px;cursor:pointer}
+.gate .err:empty,.gate .okmsg:empty{display:none}
+.btn.sm{padding:3px 10px;font-size:12px}
+.btn.ok{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:600}
+.btn.danger{color:var(--bad)}
+td.act{white-space:nowrap;text-align:right}
+td.act .btn{margin-left:4px}
+td.pwc{font-family:var(--f-num);text-align:left}
 </style>
 
 </head><body>
 <div class="gate" id="gate">
   <form id="gateForm" autocomplete="off">
-    <div><h1>올계 판매실적 대시보드</h1><div class="sub">이름과 암호를 입력하세요.</div></div>
+    <div><h1>올계 판매실적 대시보드</h1><div class="sub" id="gSub">이름과 비밀번호를 입력하세요.</div></div>
     <label for="gName">이름<input type="text" id="gName" maxlength="30" autocomplete="off" required></label>
-    <label for="gPw">암호<input type="password" id="gPw" maxlength="60" autocomplete="off" required></label>
+    <label for="gPw">비밀번호<input type="password" id="gPw" maxlength="60" autocomplete="off" required></label>
+    <label for="gPw2" id="gPw2Wrap" hidden>비밀번호 확인<input type="password" id="gPw2" maxlength="60" autocomplete="off"></label>
+    <div class="okmsg" id="gOk" role="status"></div>
     <div class="err" id="gErr" role="alert"></div>
-    <button type="submit" class="go" id="gGo">접속</button>
-    <div class="fine">접속 기록(이름, 접속 일시)이 저장되며 관리자가 확인합니다.</div>
+    <button type="submit" class="go" id="gGo">로그인</button>
+    <button type="button" class="alt" id="gSwitch">권한요청</button>
+    <div class="fine" id="gFine"></div>
   </form>
 </div>
 <div class="wrap" id="app" hidden>
@@ -283,6 +295,15 @@ html{color-scheme:light} body{margin:0} img{max-width:100%}
 </section>
 </div>
 <div id="vLog" class="view" hidden>
+  <section class="card">
+    <div class="hd"><h2>권한 요청 <span class="pill wn" id="aCnt" hidden></span></h2>
+      <span class="fg"><label class="tog"><input type="checkbox" id="aShow">비밀번호 보기</label><button type="button" class="btn" id="aReload">새로고침</button></span></div>
+    <div class="note">수락하면 그 이름과 비밀번호로 로그인할 수 있습니다. 거절하면 요청이 지워집니다.</div>
+    <div class="tbl" style="max-height:260px"><table id="aPend"></table></div>
+    <h2 style="margin-top:8px">계정 목록</h2>
+    <div class="note">차단하면 로그인 중이어도 다음 새로고침 때 접속이 끊깁니다. 같은 내용이 구글 시트 "계정" 탭에 저장됩니다.</div>
+    <div class="tbl" style="max-height:360px"><table id="aList"></table></div>
+  </section>
   <section class="card">
     <div class="hd"><h2>데이터 관리</h2>
       <span class="fg"><a class="btn pri" id="lSheet" href="#" target="_blank" rel="noopener">데이터 최신화 (구글 시트 열기)</a><button type="button" class="btn" id="lFresh">반영된 데이터 다시 불러오기</button></span></div>
@@ -804,25 +825,47 @@ function dInit(){
 // ================= 관리자 화면 =================
 function logInit(){ if(AUTH.role!=='admin') return; $('vLogBtn').hidden=false; $('lReload').onclick=()=>logRender();
   $('lFresh').onclick=()=>location.reload();
+  $('aReload').onclick=()=>accLoad(); $('aShow').onchange=()=>accDraw();
+  for(const id of ['aPend','aList']) $(id).onclick=accClick;
+  accLoad();
   if(AUTH.sheetUrl) $('lSheet').href=AUTH.sheetUrl; else $('lSheet').hidden=true;
   $('lMeta').innerHTML=`<span>데이터 기준일 <b>${dot(MAXD)}</b></span><span>마지막 반영 <b>${esc(D.builtAt||'-')}</b></span><span>집계 행 <b>${num(R.length)}</b></span><span>거래처 <b>${num(D.custs.length)}</b> · 품목 <b>${num(D.items.length)}</b></span>`; }
 async function logRender(){
-  $('periodLbl').textContent='관리자 전용';
+  $('periodLbl').textContent='관리자 전용'; accLoad();
   $('lTable').innerHTML='<tbody><tr><td class="empty">불러오는 중…</td></tr></tbody>';
   let res; try{ res=await api({action:'logs',token:AUTH.token}); }catch(e){ res={ok:false,msg:'접속 서버에 연결하지 못했습니다.'}; }
   if(!res.ok){ $('lKpis').innerHTML=''; $('lTable').innerHTML=`<tbody><tr><td class="empty">${esc(res.msg||'기록을 불러오지 못했습니다.')}</td></tr></tbody>`; return; }
   const rows=res.rows||[], kst=new Date(Date.now()+9*3600e3), today=kst.toISOString().slice(0,10), wk=new Date(kst-6*864e5).toISOString().slice(0,10);
-  const ok=r=>r[3]!=='실패', r7=rows.filter(r=>r[0]>=wk);
+  const ok=r=>r[3]==='관리자'||r[3]==='일반', r7=rows.filter(r=>r[0]>=wk);
   const K=[['오늘 접속',rows.filter(r=>r[0]===today&&ok(r)).length,'건'],['최근 7일 접속',r7.filter(ok).length,'건'],
-    ['최근 7일 접속자',new Set(r7.filter(ok).map(r=>r[2])).size,'명'],['최근 7일 암호 오류',r7.filter(r=>!ok(r)).length,'건']];
+    ['최근 7일 접속자',new Set(r7.filter(ok).map(r=>r[2])).size,'명'],['최근 7일 로그인 실패',r7.filter(r=>r[3]==='실패').length,'건']];
   $('lKpis').innerHTML=K.map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}<small>${k[2]}</small></div></div>`).join('');
   $('lTable').innerHTML='<thead><tr><th class="t">일자</th><th class="t">시간</th><th class="t">이름</th><th class="t">구분</th></tr></thead><tbody>'+
-    (rows.length?rows.map(r=>`<tr><td class="t" style="min-width:100px">${esc(r[0])}</td><td class="t" style="min-width:80px">${esc(r[1])}</td><td class="t">${esc(r[2])}</td><td style="text-align:left;min-width:70px"><span class="pill ${r[3]==='관리자'?'up':r[3]==='실패'?'dn':'nt'}">${esc(r[3])}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">아직 접속 기록이 없습니다.</td></tr>')+'</tbody>';
+    (rows.length?rows.map(r=>`<tr><td class="t" style="min-width:100px">${esc(r[0])}</td><td class="t" style="min-width:80px">${esc(r[1])}</td><td class="t">${esc(r[2])}</td><td style="text-align:left;min-width:70px"><span class="pill ${r[3]==='관리자'?'up':r[3]==='실패'?'dn':(r[3]==='권한요청'||r[3]==='승인대기')?'wn':'nt'}">${esc(r[3])}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">아직 접속 기록이 없습니다.</td></tr>')+'</tbody>';
 }
+
+// ---------- 계정 관리
+let ACC=[], accBusy=false;
+async function accLoad(){ let res; try{ res=await api({action:'accounts',token:AUTH.token}); }catch(e){ res={ok:false,msg:'접속 서버에 연결하지 못했습니다.'}; }
+  if(!res.ok){ $('aPend').innerHTML=`<tbody><tr><td class="empty">${esc(res.msg||'계정 목록을 불러오지 못했습니다.')}</td></tr></tbody>`; $('aList').innerHTML=''; return; }
+  ACC=res.rows||[]; accDraw(); }
+function accDraw(){
+  const show=$('aShow').checked, pwc=p=>show?esc(p):'•'.repeat(Math.min(10,String(p).length));
+  const pend=ACC.filter(r=>r[2]==='대기'), rest=ACC.filter(r=>r[2]!=='대기');
+  $('aCnt').hidden=!pend.length; $('aCnt').textContent=pend.length+'건 대기'; $('vLogBtn').textContent='관리자'+(pend.length?` (${pend.length})`:'');
+  $('aPend').innerHTML='<thead><tr><th class="t">이름</th><th class="t">비밀번호</th><th class="t">요청 일시</th><th></th></tr></thead><tbody>'+
+    (pend.length?pend.map(r=>`<tr><td class="t">${esc(r[0])}</td><td class="pwc">${pwc(r[1])}</td><td class="t">${esc(r[3])}</td><td class="act"><button type="button" class="btn sm ok" data-op="approve" data-name="${esc(r[0])}">수락</button><button type="button" class="btn sm danger" data-op="reject" data-name="${esc(r[0])}">거절</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">대기 중인 요청이 없습니다.</td></tr>')+'</tbody>';
+  $('aList').innerHTML='<thead><tr><th class="t">이름</th><th class="t">비밀번호</th><th class="t">상태</th><th class="t">처리 일시</th><th></th></tr></thead><tbody>'+
+    (rest.length?rest.map(r=>`<tr><td class="t">${esc(r[0])}</td><td class="pwc">${pwc(r[1])}</td><td style="text-align:left"><span class="pill ${r[2]==='승인'?'up':'dn'}">${esc(r[2])}</span></td><td class="t">${esc(r[4])}</td><td class="act">${r[2]==='승인'?`<button type="button" class="btn sm" data-op="block" data-name="${esc(r[0])}">차단</button>`:`<button type="button" class="btn sm" data-op="unblock" data-name="${esc(r[0])}">차단 해제</button>`}<button type="button" class="btn sm danger" data-op="delete" data-name="${esc(r[0])}">삭제</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">승인된 계정이 없습니다.</td></tr>')+'</tbody>';
+}
+async function accClick(e){ const b=e.target.closest('[data-op]'); if(!b||accBusy) return; const op=b.dataset.op;
+  if((op==='delete'||op==='reject')&&!b.dataset.armed){ b.dataset.armed='1'; b.textContent=op==='delete'?'정말 삭제':'정말 거절'; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=op==='delete'?'삭제':'거절'; } },4000); return; }
+  accBusy=true; b.disabled=true; let res; try{ res=await api({action:'account_set',token:AUTH.token,name:b.dataset.name,op}); }catch(err){ res={ok:false,msg:'접속 서버에 연결하지 못했습니다.'}; }
+  accBusy=false; if(res.ok){ ACC=res.rows||[]; accDraw(); } else { b.disabled=false; b.textContent=res.msg||'실패'; } }
 
 init(); dInit(); logInit(); setView(location.hash==='#detail'?'detail':'dash');
 }
-// ================= 로그인 / 데이터 받기 =================
+// ================= 로그인 / 권한요청 / 데이터 받기 =================
 const API_URL='https://script.google.com/macros/s/AKfycbyb3CJuHWWmn7ELufy_hnXVG1Rl1Qd874H5QEAIy1rHadAjeawVWxypoHPD7WtFg7Ht/exec';
 const SS='olkye-auth';
 async function api(body){
@@ -837,25 +880,42 @@ function enter(auth,D){
   startApp(D,auth);
 }
 (function(){
-  const g=id=>document.getElementById(id), form=g('gateForm'), err=g('gErr'), go=g('gGo');
+  const g=id=>document.getElementById(id), form=g('gateForm'), err=g('gErr'), okm=g('gOk'), go=g('gGo'), sw=g('gSwitch');
+  let mode='login';
   const drop=()=>{ try{ sessionStorage.removeItem(SS); }catch(e){} };
-  const busy=(on,label)=>{ go.disabled=on; go.textContent=on?label:'접속'; g('gName').disabled=on; g('gPw').disabled=on; };
+  const label=()=>mode==='login'?'로그인':'요청하기';
+  const busy=(on,text)=>{ go.disabled=on; sw.disabled=on; go.textContent=on?text:label(); for(const id of ['gName','gPw','gPw2']) g(id).disabled=on; };
+  function setMode(m,keepMsg){ mode=m; const rq=m==='request'; g('gPw2Wrap').hidden=!rq; g('gPw2').required=rq; go.textContent=label(); sw.textContent=rq?'로그인으로 돌아가기':'권한요청';
+    g('gSub').textContent=rq?'사용할 이름과 비밀번호를 정해서 요청하세요.':'이름과 비밀번호를 입력하세요.';
+    g('gFine').textContent=rq?'관리자가 수락하면 로그인할 수 있습니다. 비밀번호는 6자 이상이며 관리자가 확인할 수 있으니, 다른 곳에서 쓰는 비밀번호는 사용하지 마세요.'
+      :'처음이면 [권한요청]으로 신청하세요. 관리자가 수락해야 로그인할 수 있습니다. 접속 기록(이름, 접속 일시)이 저장됩니다.';
+    err.textContent=''; if(!keepMsg) okm.textContent=''; g('gPw').value=''; g('gPw2').value=''; }
   const noData=res=>{ err.textContent='아직 반영된 데이터가 없습니다. 구글 시트에서 [대시보드 → 반영하기]를 눌러야 합니다.';
     if(res.sheetUrl){ const a=document.createElement('a'); a.href=res.sheetUrl; a.target='_blank'; a.rel='noopener'; a.textContent=' 구글 시트 열기'; err.append(a); } };
   g('logout').onclick=()=>{ drop(); location.reload(); };
-  form.addEventListener('submit',async e=>{ e.preventDefault(); err.textContent='';
+  sw.onclick=()=>{ setMode(mode==='login'?'request':'login'); g('gName').focus(); };
+  form.addEventListener('submit',async e=>{ e.preventDefault(); err.textContent=''; okm.textContent='';
     const name=g('gName').value.trim(), pw=g('gPw').value;
     if(!name){ err.textContent='이름을 입력하세요.'; return; }
     if(API_URL.indexOf('http')!==0){ err.textContent='접속 서버 주소가 아직 설정되지 않았습니다.'; return; }
+    if(mode==='request'){
+      if(pw.length<6){ err.textContent='비밀번호는 6자 이상으로 입력하세요.'; return; }
+      if(pw!==g('gPw2').value){ err.textContent='비밀번호 확인이 일치하지 않습니다.'; return; }
+      busy(true,'요청 중…');
+      try{ const res=await api({action:'request',name,pw}); busy(false);
+        if(res.ok){ setMode('login',true); okm.textContent=res.msg||'요청이 접수되었습니다.'; } else err.textContent=res.msg||'요청하지 못했습니다.'; }
+      catch(e1){ busy(false); err.textContent='접속 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.'; }
+      return; }
     busy(true,'확인 중…');
     try{ const res=await api({action:'login',name,pw});
-      if(!res.ok){ busy(false); err.textContent=res.msg||'암호가 맞지 않습니다.'; g('gPw').value=''; g('gPw').focus(); return; }
+      if(!res.ok){ busy(false); err.textContent=res.msg||'이름 또는 비밀번호가 맞지 않습니다.'; g('gPw').value=''; g('gPw').focus(); return; }
       if(!res.data||!res.data.rows){ busy(false); noData(res); return; }
       const auth={name,role:res.role,token:res.token,sheetUrl:res.sheetUrl||''};
       try{ sessionStorage.setItem(SS,JSON.stringify(auth)); }catch(e2){}
       enter(auth,res.data); }
     catch(e1){ err.textContent='접속 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.'; }
     busy(false); });
+  setMode('login');
   let saved=null; try{ saved=JSON.parse(sessionStorage.getItem(SS)||'null'); }catch(e){}
   if(saved&&saved.token){ busy(true,'데이터를 불러오는 중…'); g('gName').value=saved.name||'';
     api({action:'data',token:saved.token}).then(res=>{ busy(false);
