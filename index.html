@@ -48,7 +48,7 @@ select,input[type=search],input[type=date]{font:inherit;font-size:13px;color:var
 .tog{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--fg2);cursor:pointer}
 .tog input{accent-color:var(--accent)}
 .reset{font:inherit;font-size:12.5px;background:none;border:none;color:var(--accent);cursor:pointer;text-decoration:underline;padding:0}
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:4px;align-content:start;min-width:0}
 .kpi .l{font-size:12px;color:var(--muted);font-weight:500}
 .kpi .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;white-space:nowrap}
@@ -87,7 +87,8 @@ td.rk{color:var(--muted);text-align:left;width:22px}
 .hd{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .empty{color:var(--muted);font-size:12.5px;padding:12px 0}
 footer{font-size:12px;color:var(--muted);line-height:1.6}
-@media (max-width:1100px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.row3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(5,minmax(0,1fr))}.kpi .v{font-size:21px}.row3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:760px){.row,.row.tables{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.filters{position:static}.wrap{padding-inline:16px}.kpi .v{font-size:20px}}
 @media (prefers-reduced-motion:no-preference){.ch rect,.ch path{transition:opacity .15s}}
 
@@ -332,6 +333,7 @@ td.pwc{font-family:var(--f-num);text-align:left}
 function startApp(D,AUTH){
 const R=D.rows, NC=D.cats.length, SHIP=D.ship, EGG=D.egg, MAXD=D.maxDay;
 const NCU=D.custs.length, GM=D.groups.map((_,g)=>D.custGrp.map((x,i)=>x===g?i:-1).filter(i=>i>=0));
+const CP=D.custs.map(n=>n.indexOf('쿠팡')>=0&&n.indexOf('택배')<0?1:0);
 const entName=e=>e<NCU?D.custs[e]:D.groups[e-NCU], entCh=e=>e<NCU?D.custCh[e]:D.groupCh[e-NCU];
 const PROD=D.cats.map((_,i)=>i).filter(i=>i!==SHIP);
 const DAY=864e5, BASE=Date.UTC(2022,0,1);
@@ -433,10 +435,10 @@ function build(){
     if(d<=to){ if(d>to-90) A.r90[ci]=(A.r90[ci]||0)+v; else if(d>to-455) A.p365[ci]=(A.p365[ci]||0)+v; }
     if(d>=st.from&&d<=to){ A.cur+=x; A.S[bm.get(bId(d,g))]+=x; A.ch[chn]+=x; A.cat[c]+=x; A.cust[ci]=(A.cust[ci]||0)+x;
       const it=A.item[ii]||(A.item[ii]=[0,0]); it[0]+=v; it[1]+=q;
-      if(c===EGG){A.qEgg+=q;A.egg+=x;} else if(c!==SHIP)A.qEtc+=q; if(D.custCp[cr])A.coup+=x; if(ci!==cr)A.mem[cr]=(A.mem[cr]||0)+x; }
+      if(c===EGG){A.qEgg+=q;A.egg+=x;} else if(c!==SHIP)A.qEtc+=q; if(CP[cr])A.coup+=x; if(ci!==cr)A.mem[cr]=(A.mem[cr]||0)+x; }
     if(hasCmp&&d>=pf&&d<=pt){ A.prev+=x; A.PS[pbm.get(bId(d,g))]+=x; A.pch[chn]+=x; A.pcat[c]+=x; A.pcust[ci]=(A.pcust[ci]||0)+x;
       const it=A.pitem[ii]||(A.pitem[ii]=[0,0]); it[0]+=v; it[1]+=q;
-      if(c===EGG){A.pqEgg+=q;A.pegg+=x;} else if(c!==SHIP)A.pqEtc+=q; if(D.custCp[cr])A.pcoup+=x; if(ci!==cr)A.pmem[cr]=(A.pmem[cr]||0)+x; }
+      if(c===EGG){A.pqEgg+=q;A.pegg+=x;} else if(c!==SHIP)A.pqEtc+=q; if(CP[cr])A.pcoup+=x; if(ci!==cr)A.pmem[cr]=(A.pmem[cr]||0)+x; }
   }
   return A;
 }
@@ -450,6 +452,9 @@ function kpis(A){
   const es=A.cur>0?A.egg/A.cur*100:0, pes=A.prev>0?A.pegg/A.prev*100:0;
   const shCls=sh>=50?'dn':sh>=40?'wn':'up';
   const dpp=(a,b)=>`${a-b>=0?'+':''}${(a-b).toFixed(1)}%p`;
+  const top3=(m,tot)=>{ const e=Object.keys(m).map(Number).filter(k=>m[k]>0).sort((a,b)=>m[b]-m[a]).slice(0,3); return {e,share:tot>0?e.reduce((p,k)=>p+m[k],0)/tot*100:0}; };
+  const t3=top3(A.cust,A.cur), pt3=top3(A.pcust,A.prev), exC=A.cur-A.coup, pexC=A.prev-A.pcoup;
+  const t3names=t3.e.map(k=>esc(entName(k))).join(' · ')||'-';
   const V=v=>{const [a,u]=fvP(v);return `${a}<small>${u}</small>`;}, qm=QM();
   const K=[
     [qm?'판매수량':'순매출',V(A.cur),`${pill(pct(A.cur,A.prev))}<span>${cn} ${fv(A.prev)}</span>`],
@@ -459,9 +464,11 @@ function kpis(A){
     ['판매수량 · 계란',`${num(A.qEgg)}<small>팩</small>`,`${pill(pct(A.qEgg,A.pqEgg))}<span>${cn} ${num(A.pqEgg)}</span><span style="flex-basis:100%;color:var(--muted)">계란 외 ${num(A.qEtc)}개 ${pill(pct(A.qEtc,A.pqEtc))}</span>`],
     [`계란 ${LB()} 비중`,`${es.toFixed(1)}<small>%</small>`,`<span class="pill nt">${dpp(es,pes)}</span><span>${cn} ${pes.toFixed(1)}%</span>`],
     [qm?'쿠팡 의존도 (수량)':'쿠팡 의존도',`${sh.toFixed(1)}<small>%</small>`,`<span class="pill ${shCls}">${sh>=50?'위험':sh>=40?'주의':'양호'}</span><span>${cn} 대비 ${dpp(sh,psh)}</span>`],
+    [qm?'쿠팡 제외 수량':'쿠팡 제외 매출',V(exC),`${pill(pct(exC,pexC))}<span>${cn} ${fv(pexC)}</span>`],
+    ['상위 3곳 비중',`${t3.share.toFixed(1)}<small>%</small>`,`<span class="pill nt">${dpp(t3.share,pt3.share)}</span><span>${cn} ${pt3.share.toFixed(1)}%</span><span style="flex-basis:100%;color:var(--muted)">${t3names}</span>`],
     ['활성 거래처',`${act}<small>곳</small>`,`${pill(pct(act,pact))}<span>${cn} ${pact}곳</span>`],
   ];
-  if(!A.hasCmp){ const nc='<span>비교 기간 데이터 없음</span>'; K[0][2]=nc; K[1][2]=`<span>${n}일 기준</span>`; K[2][2]=`<span>${mo.toFixed(1)}개월 기준</span>`; K[3][2]=`<span>${qt.toFixed(1)}분기 기준</span>`; K[4][2]=`<span>계란 외 ${num(A.qEtc)}개</span>`; K[5][2]=nc; K[6][2]=`<span class="pill ${shCls}">${sh>=50?'위험':sh>=40?'주의':'양호'}</span>`; K[7][2]=nc; }
+  if(!A.hasCmp){ const nc='<span>비교 기간 데이터 없음</span>'; K[0][2]=nc; K[1][2]=`<span>${n}일 기준</span>`; K[2][2]=`<span>${mo.toFixed(1)}개월 기준</span>`; K[3][2]=`<span>${qt.toFixed(1)}분기 기준</span>`; K[4][2]=`<span>계란 외 ${num(A.qEtc)}개</span>`; K[5][2]=nc; K[6][2]=`<span class="pill ${shCls}">${sh>=50?'위험':sh>=40?'주의':'양호'}</span>`; K[7][2]=nc; K[8][2]=`<span style="color:var(--muted)">${t3names}</span>`; K[9][2]=nc; }
   $('kpis').innerHTML=K.map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
   $('periodLbl').textContent=`선택 ${dot(st.from)} ~ ${dot(st.to)}`+(A.hasCmp?` · ${cn} ${dot(A.pf)} ~ ${dot(A.pt)}`:' · 비교 기간 데이터 없음');
 }
@@ -884,7 +891,7 @@ function enter(auth,D){
   document.getElementById('gate').hidden=true; document.getElementById('app').hidden=false;
   const w=document.getElementById('whoLbl'); w.textContent='';
   const b=document.createElement('b'); b.textContent=auth.name; w.append(b,' · '+(auth.role==='admin'?'관리자':'일반 조회'));
-  document.getElementById('foot').innerHTML=D.foot||'';
+  document.getElementById('foot').innerHTML=(D.foot||'').replace(/쿠팡 의존도는[^<]*/,'쿠팡 의존도는 쿠팡 직매입 매출의 비중입니다. 오픈마켓에서 직접 판매하는 쿠팡택배는 포함하지 않습니다.');
   startApp(D,auth);
 }
 (function(){
