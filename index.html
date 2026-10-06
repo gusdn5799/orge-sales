@@ -151,6 +151,13 @@ html{color-scheme:light} body{margin:0} img{max-width:100%}
 td.act{white-space:nowrap;text-align:right}
 td.act .btn{margin-left:4px}
 td.pwc{font-family:var(--f-num);text-align:left}
+.tog.sw{gap:8px;font-size:13.5px;color:var(--fg)}
+.tog.sw input{appearance:none;-webkit-appearance:none;width:38px;height:22px;border-radius:999px;background:var(--y-mid);position:relative;cursor:pointer;transition:background .15s;flex:none;margin:0}
+.tog.sw input::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--panel);transition:transform .15s}
+.tog.sw input:checked{background:var(--accent)}
+.tog.sw input:checked::after{transform:translateX(16px)}
+.tog.sw input:disabled{opacity:.5;cursor:default}
+.tog.sw input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 
 </head><body>
@@ -323,6 +330,7 @@ td.pwc{font-family:var(--f-num);text-align:left}
     <div class="hd"><h2>주간 요약 메일</h2>
       <span class="fg"><select id="mMode" aria-label="보낼 범위"><option value="last">지난주 (월~일)</option><option value="this">이번 주 (월~데이터 기준일)</option></select><button type="button" class="btn pri" id="mSend">요약 메일 지금 보내기</button></span></div>
     <div class="meta" id="mMeta"></div>
+    <div class="fg" id="mAutoWrap" hidden><label class="tog sw"><input type="checkbox" id="mAuto"><b>주간 자동 메일</b></label><span class="note" id="mAutoLbl"></span></div>
     <div class="note" id="mMsg" role="status">매출·수량, 전주 대비, 4주 평균 대비, 상위 거래처 5곳, 상위 품목 5개를 메일로 보냅니다.</div>
   </section>
   <section class="kpis k4" id="lKpis" aria-label="접속 요약"></section>
@@ -887,7 +895,15 @@ async function accClick(e){ const b=e.target.closest('[data-op]'); if(!b||accBus
 // ---------- 주간 요약 메일
 async function mailInit(){
   let info; try{ info=await api({action:'mail_info',token:AUTH.token}); }catch(e){ info={ok:false}; }
-  $('mMeta').innerHTML=info.ok?`<span>받는 사람 <b>${esc(info.to)}</b></span><span>자동 발송 <b>${info.scheduled===true?'설정됨':info.scheduled===false?'설정 안 됨':'확인 불가'}</b> · 매주 월요일 8시 입력 요청, 10시 요약</span>`:'';
+  $('mMeta').innerHTML=info.ok?`<span>받는 사람 <b>${esc(info.to)}</b></span><span>예약 <b>${info.scheduled===true?'설정됨':info.scheduled===false?'설정 안 됨':'확인 불가'}</b> · 매주 월요일 8시 입력 요청, 10시 요약</span>`:'';
+  // 주간 자동 메일 켜고 끄기 (서버 코드가 이 기능을 지원할 때만 표시)
+  const aw=$('mAutoWrap'), at=$('mAuto'), al=$('mAutoLbl');
+  const autoLbl=on=>{ al.textContent=on?'켜짐 · 월요일 8시 입력 요청 메일과 10시 주간 브리핑 메일을 보냅니다.':'꺼짐 · 입력 요청 메일과 주간 브리핑 메일을 둘 다 보내지 않습니다. "요약 메일 지금 보내기"는 그대로 쓸 수 있습니다.'; al.style.color=on?'':'var(--warn)'; };
+  if(info.ok&&typeof info.auto==='boolean'){ aw.hidden=false; at.checked=info.auto; autoLbl(info.auto);
+    at.onchange=async()=>{ const want=at.checked; at.disabled=true; al.textContent='저장 중…'; al.style.color='';
+      let res; try{ res=await api({action:'mail_auto',token:AUTH.token,on:want}); }catch(e){ res={ok:false,msg:'접속 서버에 연결하지 못했습니다.'}; }
+      at.disabled=false;
+      if(res.ok){ at.checked=res.auto; autoLbl(res.auto); } else { at.checked=!want; al.textContent=res.msg||'바꾸지 못했습니다.'; al.style.color='var(--bad)'; } }; }
   const b=$('mSend'); let busy=false;
   b.onclick=async()=>{ if(busy) return;
     if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='한 번 더 누르면 발송'; setTimeout(()=>{ if(b.dataset.armed){ delete b.dataset.armed; b.textContent='요약 메일 지금 보내기'; } },4000); return; }
