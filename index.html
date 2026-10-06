@@ -159,6 +159,13 @@ td.pwc{font-family:var(--f-num);text-align:left}
 .tog.sw input:disabled{opacity:.5;cursor:default}
 .tog.sw input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .gate .pcnote{border-top:1px solid var(--line);padding-top:10px;color:var(--fg2)}
+.ntc{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(10,16,12,.45);overflow:auto}
+.ntcbox{position:relative;width:min(520px,100%);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:22px 24px 20px;box-shadow:0 16px 44px rgba(0,0,0,.22)}
+.ntcbox h2{font-size:17px;font-weight:700;margin:0 36px 12px 0;letter-spacing:-.01em}
+.ntcbox ol{margin:0;padding-left:20px;display:grid;gap:8px;font-size:14px;line-height:1.6;color:var(--fg)}
+.ntcx{position:absolute;top:10px;right:10px;width:34px;height:34px;border:0;border-radius:8px;background:none;color:var(--fg2);font-size:24px;line-height:1;cursor:pointer}
+.ntcx:hover{background:var(--grid);color:var(--fg)}
+.ntcx:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 </style>
 
 </head><body>
@@ -924,12 +931,34 @@ async function api(body){
   const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),redirect:'follow'});
   return r.json();
 }
-function enter(auth,D){
+// 업데이트 안내 팝업: 내용은 로그인할 때 서버(구글 시트 "공지" 탭)에서 받습니다. 닫으면 그 버전은 이 브라우저에서 다시 뜨지 않습니다.
+const NKEY='olkye-notice-seen';
+function showNotice(n,force){
+  if(!n||!n.lines||!n.lines.length) return;
+  let seen=''; try{ seen=localStorage.getItem(NKEY)||''; }catch(e){}
+  if(!force&&seen===n.ver) return;
+  const old=document.getElementById('ntc'); if(old) old.remove();
+  const m=document.createElement('div'); m.id='ntc'; m.className='ntc'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','업데이트 안내');
+  const box=document.createElement('div'); box.className='ntcbox';
+  const x=document.createElement('button'); x.type='button'; x.className='ntcx'; x.setAttribute('aria-label','닫기'); x.textContent='×';
+  const h=document.createElement('h2'); h.textContent='[ '+n.ver+' 업데이트 안내 ]';
+  const ol=document.createElement('ol'); n.lines.forEach(t=>{ const li=document.createElement('li'); li.textContent=t; ol.append(li); });
+  box.append(x,h,ol); m.append(box); document.body.append(m);
+  const esc=e=>{ if(e.key==='Escape') close(); };
+  const close=()=>{ try{ localStorage.setItem(NKEY,n.ver); }catch(e){} m.remove(); document.removeEventListener('keydown',esc); };
+  x.onclick=close; document.addEventListener('keydown',esc); x.focus();
+}
+function enter(auth,D,notice){
   document.getElementById('gate').hidden=true; document.getElementById('app').hidden=false;
   const w=document.getElementById('whoLbl'); w.textContent='';
   const b=document.createElement('b'); b.textContent=auth.name; w.append(b,' · '+(auth.role==='admin'?'관리자':'일반 조회'));
   document.getElementById('foot').innerHTML=(D.foot||'').replace(/쿠팡 의존도는[^<]*/,'쿠팡 의존도는 쿠팡 직매입 매출의 비중입니다. 오픈마켓에서 직접 판매하는 쿠팡택배는 포함하지 않습니다.');
   startApp(D,auth);
+  if(notice&&notice.lines&&notice.lines.length){
+    if(!document.getElementById('ntcOpen')){ const o=document.createElement('button'); o.type='button'; o.className='reset'; o.id='ntcOpen'; o.textContent='업데이트 안내'; document.getElementById('logout').before(o); }
+    document.getElementById('ntcOpen').onclick=()=>showNotice(notice,true);
+    showNotice(notice,false);
+  }
 }
 (function(){
   const g=id=>document.getElementById(id), form=g('gateForm'), err=g('gErr'), okm=g('gOk'), go=g('gGo'), sw=g('gSwitch');
@@ -964,14 +993,14 @@ function enter(auth,D){
       if(!res.data||!res.data.rows){ busy(false); noData(res); return; }
       const auth={name,role:res.role,token:res.token,sheetUrl:res.sheetUrl||''};
       try{ sessionStorage.setItem(SS,JSON.stringify(auth)); }catch(e2){}
-      enter(auth,res.data); }
+      enter(auth,res.data,res.notice); }
     catch(e1){ err.textContent='접속 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.'; }
     busy(false); });
   setMode('login');
   let saved=null; try{ saved=JSON.parse(sessionStorage.getItem(SS)||'null'); }catch(e){}
   if(saved&&saved.token){ busy(true,'데이터를 불러오는 중…'); g('gName').value=saved.name||'';
     api({action:'data',token:saved.token}).then(res=>{ busy(false);
-      if(res.ok&&res.data&&res.data.rows){ saved.role=res.role; saved.sheetUrl=res.sheetUrl||''; enter(saved,res.data); }
+      if(res.ok&&res.data&&res.data.rows){ saved.role=res.role; saved.sheetUrl=res.sheetUrl||''; enter(saved,res.data,res.notice); }
       else { drop(); if(res.ok) noData(res); else err.textContent=res.msg||''; g('gPw').focus(); } })
     .catch(()=>{ busy(false); err.textContent='접속 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.'; }); }
   else g('gName').focus();
