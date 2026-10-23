@@ -209,6 +209,7 @@ td.pwc{font-family:var(--f-num);text-align:left}
   <div class="fg"><span class="t">채널</span><label class="tog"><input type="checkbox" id="fChAll">전체</label><span id="fCh" class="fg"></span></div>
   <div class="fg"><span class="t">카테고리</span><label class="tog"><input type="checkbox" id="fCatAll">전체</label><span id="fCat" class="fg"></span></div>
   <div class="fg"><label class="t" for="fCust">거래처</label><span class="cb"><input type="text" id="fCust" role="combobox" autocomplete="off" spellcheck="false" placeholder="거래처 검색 또는 선택" aria-expanded="false" aria-autocomplete="list" aria-controls="fCustList"><button type="button" class="cbx" tabindex="-1" aria-label="거래처 목록 열기">▾</button><ul id="fCustList" role="listbox" hidden></ul></span></div>
+  <div class="fg"><label class="t" for="fItem">품목</label><span class="cb"><input type="text" id="fItem" role="combobox" autocomplete="off" spellcheck="false" placeholder="품목 검색 또는 선택" aria-expanded="false" aria-autocomplete="list" aria-controls="fItemList"><button type="button" class="cbx" tabindex="-1" aria-label="품목 목록 열기">▾</button><ul id="fItemList" role="listbox" hidden></ul></span></div>
   <div class="fg">
     <label class="tog"><input type="checkbox" id="fShip">택배비 포함</label>
     <button type="button" class="reset" id="fReset">초기화</button>
@@ -385,13 +386,13 @@ function bLabel(b,g){ if(g==='D')return sdot(b.s0); if(g==='W')return sdot(b.s0)
 function buckets(a,b,g){ const out=[]; let last=null; for(let d=a;d<=b;d++){const id=bId(d,g); if(!last||last.id!==id){last={id,s:d,e:d,s0:g==='W'?id*7+2:d};out.push(last);} else last.e=d;} return out; }
 const GN={D:'일별',W:'주별',M:'월별',Q:'분기별',Y:'연도별'};
 
-const DEF=()=>({from:idx(maxY,0,1),to:MAXD,g:'M',cmp:'yoy',mode:'period',ch:new Set(D.chs.map((_,i)=>i)),cat:new Set(PROD),cust:-1,ship:false,cs:'amt',al:'churn',m:'v'});
+const DEF=()=>({from:idx(maxY,0,1),to:MAXD,g:'M',cmp:'yoy',mode:'period',ch:new Set(D.chs.map((_,i)=>i)),cat:new Set(PROD),cust:-1,item:-1,ship:false,cs:'amt',al:'churn',m:'v'});
 const st=DEF();
 
 
 // ---------- searchable customer picker
-let cbF=null, cbD=null;
-function combo(id,all,onPick){
+let cbF=null, cbD=null, cbI=null;
+function combo(id,all,onPick,none){
   const inp=$(id), box=inp.parentElement, ul=box.querySelector('ul'), btn=box.querySelector('.cbx');
   let val=null, list=[], act=-1, open=false;
   const labelOf=v=>{ const o=all.find(o=>o.v===v); return o?o.label:''; };
@@ -403,7 +404,7 @@ function combo(id,all,onPick){
     act=qq?(list.length?0:-1):list.findIndex(o=>o.v===val);
     let h='', g=null; list.forEach((o,i)=>{ if(!qq&&o.grp!==g){ g=o.grp; if(g) h+=`<li class="gl" role="presentation">${esc(g)}</li>`; }
       h+=`<li role="option" id="${id}-o${i}" data-i="${i}" class="${o.v===val?'cur':''}">${hl(o.label,qq)}</li>`; });
-    ul.innerHTML=h||'<li class="none" role="presentation">일치하는 거래처가 없습니다.</li>'; show(true); mark(); }
+    ul.innerHTML=h||'<li class="none" role="presentation">'+(none||'일치하는 거래처가 없습니다.')+'</li>'; show(true); mark(); }
   const pick=i=>{ const o=list[i]; if(!o) return; val=o.v; inp.value=o.label; show(false); onPick(o.v); };
   inp.addEventListener('focus',()=>{ inp.select(); draw(''); });
   inp.addEventListener('input',()=>draw(inp.value));
@@ -450,6 +451,7 @@ function build(){
     if(c===SHIP){ if(!st.ship) continue; } else if(!st.cat.has(c)) continue;
     const chn=D.custCh[cr]; if(!st.ch.has(chn)) continue;
     if(st.cust>=0&&ci!==st.cust) continue;
+    if(st.item>=0&&ii!==st.item) continue;
     const y=YY[d], m=MM[d];
     (A.ov[y]||(A.ov[y]=Array(12).fill(0)))[m]+=x;
     if(c!==SHIP) (A.mix[y]||(A.mix[y]=Array(NC).fill(0)))[c]+=x;
@@ -647,7 +649,7 @@ function sync(){ $('fFrom').value=iso(st.from); $('fTo').value=iso(st.to);
   press('[data-g]','g',st.g); press('[data-cmp]','cmp',st.cmp); press('[data-m]','m',st.m); press('[data-mode]','mode',st.mode); press('[data-cs]','cs',st.cs); press('[data-al]','al',st.al);
   document.querySelectorAll('[data-ch]').forEach(b=>b.setAttribute('aria-pressed',String(st.ch.has(+b.dataset.ch))));
   document.querySelectorAll('[data-cat]').forEach(b=>b.setAttribute('aria-pressed',String(st.cat.has(+b.dataset.cat))));
-  cbF.set(st.cust); $('fShip').checked=st.ship;
+  cbF.set(st.cust); cbI.set(st.item); $('fShip').checked=st.ship;
   for(const [id,set,n] of [['fChAll',st.ch,D.chs.length],['fCatAll',st.cat,PROD.length]]){ $(id).checked=set.size===n; $(id).indeterminate=set.size>0&&set.size<n; } }
 function toggle(set,v){ set.has(v)?set.delete(v):set.add(v); }
 function go(){ sync(); render(); }
@@ -657,6 +659,11 @@ function init(){
   $('fCh').innerHTML=D.chs.map((c,i)=>`<button type="button" class="chip" data-ch="${i}">${esc(c)}</button>`).join('');
   $('fCat').innerHTML=PROD.map(c=>`<button type="button" class="chip" data-cat="${c}">${esc(D.cats[c])}</button>`).join('');
   cbF=combo('fCust',[{v:-1,label:'전체 거래처',grp:''}].concat(GOPTS,D.custs.map((c,i)=>({v:i,label:c,grp:'거래처'}))),v=>{ st.cust=v; go(); });
+  // 품목 선택: 카테고리별로 묶고, 카테고리 안에서는 전체 기간 매출이 큰 순서. 택배비·매출 없는 품목은 뺍니다.
+  { const tot=new Float64Array(D.items.length); for(const r of R) tot[r[2]]+=r[4];
+    const opts=[{v:-1,label:'전체 품목',grp:''}];
+    PROD.forEach(c=>{ D.items.map((n,i)=>i).filter(i=>D.itemCat[i]===c&&tot[i]!==0).sort((a,b)=>tot[b]-tot[a]).forEach(i=>opts.push({v:i,label:D.items[i],grp:D.cats[c]})); });
+    cbI=combo('fItem',opts,v=>{ st.item=v; if(v>=0) st.cat.add(D.itemCat[v]); go(); },'일치하는 품목이 없습니다.'); }
   const clamp=d=>Math.max(0,Math.min(MAXD,d));
   $('fFrom').onchange=e=>{ if(!e.target.value) return sync(); st.from=clamp(fromIso(e.target.value)); if(st.from>st.to) st.to=st.from; go(); };
   $('fTo').onchange=e=>{ if(!e.target.value) return sync(); st.to=clamp(fromIso(e.target.value)); if(st.to<st.from) st.from=st.to; go(); };
